@@ -1,0 +1,17 @@
+[Unit]
+Description=nginxhouse
+After=network.target
+
+[Service]
+User=www-data
+WorkingDirectory=/opt/nginxhouse
+ExecStart=/usr/bin/node nginxhouse.js
+
+Restart=always
+RestartSec=10
+
+MemoryLimit=200M
+MemoryAccounting=true
+
+[Install]
+WantedBy=multi-user.target
