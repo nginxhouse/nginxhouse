@@ -26,7 +26,8 @@
 |access_log_report_by_all|300k|9|aggregated data by minutes|
 
 ##### Grafana
-dashboard [#10011](https://grafana.com/dashboards/10758)
+dashboard [#10758](https://grafana.com/dashboards/10758)
+![grafana_dashboard.png](https://raw.githubusercontent.com/nginxhouse/nginxhouse/master/grafana_dashboard.png)
 
 grafana_dashboard.png
 
@@ -34,3 +35,4 @@ grafana_dashboard.png
 MIT License.
 
 ##### See also
+- [pinba-server](https://github.com/pinba-server/pinba-server)
