@@ -26,7 +26,7 @@
 |access_log_report_by_all|300k|9|aggregated data by minutes|
 
 ##### Grafana
-dashboard [#10011](https://grafana.com/dashboards/10011)
+dashboard [#10011](https://grafana.com/dashboards/10758)
 
 grafana_dashboard.png
 
