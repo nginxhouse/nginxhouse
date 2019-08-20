@@ -29,8 +29,6 @@
 dashboard [#10758](https://grafana.com/dashboards/10758)
 ![grafana_dashboard.png](https://raw.githubusercontent.com/nginxhouse/nginxhouse/master/grafana_dashboard.png)
 
-grafana_dashboard.png
-
 ##### License
 MIT License.
 
