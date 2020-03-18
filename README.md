@@ -18,6 +18,10 @@
 - `sudo cp nginxhouse.service /usr/lib/systemd/system/nginxhouse.service`
 - `sudo systemctl daemon-reload && systemctl enable nginxhouse && systemctl start nginxhouse`
 
+##### Troubleshooting
+nginxhouse writes unsent rows in log when clickhouse is unavailable . You can send unsent rows when clickhouse is available:
+- `mv unsent_rows.log unsent_rows_buffer.log && cat unsent_rows_buffer.log | clickhouse-client --query "INSERT INTO nginx.access_log FORMAT JSONEachRow" && rm -f unsent_rows_buffer.log`
+
 ##### Stats for 24 hours with about 450 RPS on nginx:
 
 |table|rows|size, Mb|description|

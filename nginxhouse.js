@@ -27,25 +27,43 @@ server.on('listening', () => {
     const address = server.address();
     console.log(`server listening ${address.address}:${address.port}`);
 
+    var lockForSending = false;
     setInterval(function () {
-        if (rows) {
+        if (rows && !lockForSending) {
+            lockForSending = true;
+
+            var rowsBuffer = rows;
+            rows = '';
             //console.log(rows);
 
-            clickhouseOptions.headers['Content-Length'] = Buffer.byteLength(rows);
+            clickhouseOptions.headers['Content-Length'] = Buffer.byteLength(rowsBuffer);
             var request = http.request(clickhouseOptions);
 
             //request.setNoDelay(true);
 
-            request.on('error', (error) => {console.log(error);});
+            request.on('error', (error) => {
+                //console.log(error);
+                fs.appendFile(config.unsentRowsLog, rowsBuffer, (error) => {
+                    if (error) {
+                        console.log(error);
+                    }
+                    lockForSending = false;
+                });
+            });
             request.on('response', (response) => {
                 let data = '';
-                response.on('data', function (chunk) {data += chunk;});
-                response.on('end', (response) => {if (data !== '') console.log(data);});
+                response.on('data', function (chunk) {
+                    data += chunk;
+                });
+                response.on('end', (response) => {
+                    if (data !== '') {
+                        console.log(data);
+                    }
+                    lockForSending = false;
+                });
             });
-            request.write(rows);
+            request.write(rowsBuffer);
             request.end();
-
-            rows = '';
         }
     }, config.timer * 1000);
 });
