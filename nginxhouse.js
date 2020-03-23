@@ -47,6 +47,7 @@ server.on('listening', () => {
                     if (error) {
                         console.log(error);
                     }
+                    rowsBuffer = '';
                     lockForSending = false;
                 });
             });
@@ -59,6 +60,7 @@ server.on('listening', () => {
                     if (data !== '') {
                         console.log(data);
                     }
+                    rowsBuffer = '';
                     lockForSending = false;
                 });
             });
