@@ -3,7 +3,8 @@
   "port": 1514,
   "clickhouse":{
     "url": "http:\/\/127.0.0.1:8123?user=default",
-    "table": "nginx.access_log"
+    "table": "nginx.access_log",
+    "timeout": 60
   },
   "unsentRowsLog": "unsent_rows.log",
   "timer": 60
