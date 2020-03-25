@@ -12,7 +12,12 @@ const clickhouseOptions = url.parse(config.clickhouse.url);
 clickhouseOptions.path += `&query=INSERT+INTO+${config.clickhouse.table}+FORMAT+JSONEachRow`;
 clickhouseOptions.method = 'POST';
 clickhouseOptions.headers = {'Content-Type': 'text/plain'};
-clickhouseOptions.timeout = config.clickhouse.timeout;
+clickhouseOptions.timeout = config.clickhouse.timeout * 1000;
+
+function errorLog(error) {
+    console.log(error);
+    fs.appendFileSync(config.errorLog, new Date().toISOString() + ': '+ error);
+}
 
 if (cluster.isMaster) {
     // Fork workers.
@@ -20,9 +25,11 @@ if (cluster.isMaster) {
     for (let i = 0; i < numCPUs; i++) {
         cluster.fork();
     }
+
+    //todo: send unsent rows automatically
 } else {
     server.on('error', (err) => {
-        console.log(`server error:\n${err.stack}`);
+        errorLog(`server error:\n${err.stack}`);
         server.close();
     });
 
@@ -37,63 +44,62 @@ if (cluster.isMaster) {
     });
 
     server.on('listening', () => {
-        const address = server.address();
+        //const address = server.address();
         //console.log(`server listening ${address.address}:${address.port}`);
-
-        var lockForSending = false;
-        setInterval(function () {
-            if (rows && !lockForSending) {
-                lockForSending = true;
-
-                rowsBuffer = rows;
-                rows = '';
-                //console.log(rows);
-
-                clickhouseOptions.headers['Content-Length'] = Buffer.byteLength(rowsBuffer);
-                var request = http.request(clickhouseOptions);
-
-                //request.setNoDelay(true);
-
-                request.on('response', (response) => {
-                    let data = '';
-                    response.on('data', function (chunk) {
-                        data += chunk;
-                    });
-                    response.on('end', (response) => {
-                        if (data !== '') {
-                            console.log(data);
-                        }
-                        rowsBuffer = '';
-                        lockForSending = false;
-                    });
-                });
-
-                request.on('error', (error) => {
-                    console.log(error);
-                    fs.appendFile(config.unsentRowsLog, rowsBuffer, (error) => {
-                        if (error) {
-                            console.log(error);
-                        }
-                        rowsBuffer = '';
-                        lockForSending = false;
-                    });
-                });
-
-                request.on('timeout', () => {
-                    request.abort();
-                });
-
-                request.write(rowsBuffer);
-                request.end();
-            }
-        }, config.timer * 1000);
     });
+
+    let lockForSending = false;
+    setInterval(function () {
+        if (rows && !lockForSending) {
+            lockForSending = true;
+
+            rowsBuffer = rows;
+            rows = '';
+            //console.log(rows);
+
+            clickhouseOptions.headers['Content-Length'] = Buffer.byteLength(rowsBuffer);
+            var request = http.request(clickhouseOptions);
+
+            //request.setNoDelay(true);
+
+            request.on('response', (response) => {
+                let data = '';
+                response.on('data', function (chunk) {
+                    data += chunk;
+                });
+                response.on('end', (response) => {
+                    if (data !== '') {
+                        //console.log(data);
+                    }
+                    rowsBuffer = '';
+                    lockForSending = false;
+                });
+            });
+
+            request.on('error', (error) => {
+                errorLog(error);
+                fs.appendFile(config.unsentRowsLog, rowsBuffer, (error) => {
+                    if (error) {
+                        errorLog(error);
+                    }
+                    rowsBuffer = '';
+                    lockForSending = false;
+                });
+            });
+
+            request.on('timeout', () => {
+                request.abort();
+            });
+
+            request.write(rowsBuffer);
+            request.end();
+        }
+    }, config.timer * 1000);
 
     process.on('SIGTERM', () => { //service nginxhouse stop
         fs.appendFileSync(config.unsentRowsLog, rows);
         rows = '';
         process.exit(0);
-        //cluster.ipc.close()
     });
 
     process.on('SIGINT', () => { // ctrl + C

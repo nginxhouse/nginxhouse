@@ -7,5 +7,6 @@
     "timeout": 60
   },
   "unsentRowsLog": "unsent_rows.log",
+  "errorLog": "error.log",
   "timer": 60
 }
