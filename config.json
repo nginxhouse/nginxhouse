@@ -1,6 +1,7 @@
 {
   "host": "127.0.0.1",
   "port": 1514,
+  "forks": 1,
   "clickhouse":{
     "url": "http:\/\/127.0.0.1:8123?user=default",
     "table": "nginx.access_log",

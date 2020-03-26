@@ -20,9 +20,12 @@ function errorLog(error) {
 }
 
 if (cluster.isMaster) {
+    if (!config.forks) {
+        config.forks = os.cpus().length;
+    }
+
     // Fork workers.
-    const numCPUs = os.cpus().length;
-    for (let i = 0; i < numCPUs; i++) {
+    for (let i = 0; i < config.forks; i++) {
         cluster.fork();
     }
 
