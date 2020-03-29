@@ -4,6 +4,7 @@ const http = require('http');
 const dgram = require('dgram');
 const cluster = require('cluster');
 const os = require('os');
+const child_process = require('child_process');
 
 const server = dgram.createSocket('udp4');
 
@@ -16,7 +17,56 @@ clickhouseOptions.timeout = config.clickhouse.timeout * 1000;
 
 function errorLog(error) {
     console.log(error);
-    fs.appendFileSync(config.errorLog, new Date().toISOString() + ': '+ error);
+    fs.appendFile(config.errorLog, `${new Date().toISOString()}: ${error}\n`, () => {});
+}
+
+function saveUnsentRows(rows) {
+    //console.log(rows);
+    if (!rows || !config.unsentRowsDir) return;
+
+    fs.appendFile(`${config.unsentRowsDir}/${new Date().toISOString()}.log`, rows, (error) => {if (error) {errorLog(error);}});
+}
+
+function saveUnsentRowsSync(rows) {
+    //console.log(rows);
+    if (!rows || !config.unsentRowsDir) return;
+
+    fs.appendFileSync(`${config.unsentRowsDir}/${new Date().toISOString()}.log`, rows);
+}
+
+let lockForSending = false;
+
+function sendRows(rows) {
+    clickhouseOptions.headers['Content-Length'] = Buffer.byteLength(rows);
+    const request = http.request(clickhouseOptions);
+
+    //request.setNoDelay(true);
+
+    request.on('response', (response) => {
+        let data = '';
+        response.on('data', function (chunk) {
+            data += chunk;
+        });
+        response.on('end', (response) => {
+            if (data !== '') {
+                //console.log(data);
+            }
+            lockForSending = false;
+        });
+    });
+
+    request.on('error', (error) => {
+        errorLog(error);
+        saveUnsentRows(rows);
+        lockForSending = false;
+    });
+
+    request.on('timeout', () => {
+        request.abort();
+    });
+
+    request.write(rows);
+    request.end();
 }
 
 if (cluster.isMaster) {
@@ -29,7 +79,21 @@ if (cluster.isMaster) {
         cluster.fork();
     }
 
-    //todo: send unsent rows automatically
+    //send unsent rows automatically
+
+    setInterval(() => {
+        if (!config.unsentRowsDir || lockForSending) return;
+        lockForSending = true;
+
+        //fs.readdir(config.unsentRowsDir, (error, files) => {
+            //console.log(files);
+            child_process.exec(`find unsent_rows -type f -mmin +${1+config.timer/60} | while read i; do cat "$i" | curl '${config.clickhouse.url}&query=INSERT+INTO+${config.clickhouse.table}+FORMAT+JSONEachRow' --data-binary @- && rm -f "$i"; done`, (error) => {
+                //console.log(result);
+                if (error) {errorLog(error);}
+                lockForSending = false;
+            });
+        //});
+    }, config.resendTimer * 1000);
 } else {
     server.on('error', (err) => {
         errorLog(`server error:\n${err.stack}`);
@@ -37,7 +101,6 @@ if (cluster.isMaster) {
     });
 
     let rows = '';
-    let rowsBuffer = '';
 
     server.on('message', (message, rinfo) => {
         rows += message.toString()
@@ -51,62 +114,24 @@ if (cluster.isMaster) {
         //console.log(`server listening ${address.address}:${address.port}`);
     });
 
-    let lockForSending = false;
     setInterval(function () {
         if (rows && !lockForSending) {
             lockForSending = true;
 
-            rowsBuffer = rows;
+            sendRows(rows);
             rows = '';
             //console.log(rows);
-
-            clickhouseOptions.headers['Content-Length'] = Buffer.byteLength(rowsBuffer);
-            var request = http.request(clickhouseOptions);
-
-            //request.setNoDelay(true);
-
-            request.on('response', (response) => {
-                let data = '';
-                response.on('data', function (chunk) {
-                    data += chunk;
-                });
-                response.on('end', (response) => {
-                    if (data !== '') {
-                        //console.log(data);
-                    }
-                    rowsBuffer = '';
-                    lockForSending = false;
-                });
-            });
-
-            request.on('error', (error) => {
-                errorLog(error);
-                fs.appendFile(config.unsentRowsLog, rowsBuffer, (error) => {
-                    if (error) {
-                        errorLog(error);
-                    }
-                    rowsBuffer = '';
-                    lockForSending = false;
-                });
-            });
-
-            request.on('timeout', () => {
-                request.abort();
-            });
-
-            request.write(rowsBuffer);
-            request.end();
         }
     }, config.timer * 1000);
 
     process.on('SIGTERM', () => { //service nginxhouse stop
-        fs.appendFileSync(config.unsentRowsLog, rows);
+        saveUnsentRowsSync(rows);
         rows = '';
         process.exit(0);
     });
 
     process.on('SIGINT', () => { // ctrl + C
-        fs.appendFileSync(config.unsentRowsLog, rows);
+        saveUnsentRowsSync(rows);
         rows = '';
         process.exit(0);
     });

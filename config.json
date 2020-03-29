@@ -7,7 +7,8 @@
     "table": "nginx.access_log",
     "timeout": 60
   },
-  "unsentRowsLog": "unsent_rows.log",
   "errorLog": "error.log",
-  "timer": 60
+  "timer": 60,
+  "unsentRowsDir": "unsent_rows",
+  "resendTimer": 60
 }
