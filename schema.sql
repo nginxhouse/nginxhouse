@@ -56,7 +56,7 @@ SELECT
     multiIf(request_uri LIKE '%?%', replaceRegexpOne(request_uri, '([^?]*)\?.*', '\\1'), request_uri LIKE '/%/%.%', replaceRegexpOne(request_uri, '/([^/]*)/.*\.([^.]+)$', '/\\1/*'), request_uri) as request_uri,
     request_method,
     status,
-    if(response_time = 0, 1, 2) as cache,
+    if(response_time = 0, 1, 0) as cache,
 
     count(*) as n,
 

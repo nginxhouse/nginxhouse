@@ -5,6 +5,7 @@ const dgram = require('dgram');
 const cluster = require('cluster');
 const os = require('os');
 const child_process = require('child_process');
+const zlib = require('zlib');
 
 const server = dgram.createSocket('udp4');
 
@@ -24,49 +25,53 @@ function saveUnsentRows(rows) {
     //console.log(rows);
     if (!rows || !config.unsentRowsDir) return;
 
-    fs.appendFile(`${config.unsentRowsDir}/${new Date().toISOString()}.log`, rows, (error) => {if (error) {errorLog(error);}});
+    fs.writeFile(`${config.unsentRowsDir}/${new Date().toISOString()}_${process.pid}.gz`, rows, (error) => {if (error) {errorLog(error);}});
 }
 
 function saveUnsentRowsSync(rows) {
     //console.log(rows);
     if (!rows || !config.unsentRowsDir) return;
 
-    fs.appendFileSync(`${config.unsentRowsDir}/${new Date().toISOString()}.log`, rows);
+    fs.writeFileSync(`${config.unsentRowsDir}/${new Date().toISOString()}_${process.pid}.gz`, zlib.gzipSync(rows));
 }
 
 let lockForSending = false;
 
 function sendRows(rows) {
-    clickhouseOptions.headers['Content-Length'] = Buffer.byteLength(rows);
-    const request = http.request(clickhouseOptions);
+    zlib.gzip(rows, (_, rows) => {
+        clickhouseOptions.headers['Content-Length'] = Buffer.byteLength(rows);
+        clickhouseOptions.headers['Content-Encoding'] = 'gzip';
+        const request = http.request(clickhouseOptions);
 
-    //request.setNoDelay(true);
+        //request.setNoDelay(true);
 
-    request.on('response', (response) => {
-        let data = '';
-        response.on('data', function (chunk) {
-            data += chunk;
+        request.on('response', (response) => {
+            let data = '';
+            response.on('data', function (chunk) {
+                data += chunk;
+            });
+            response.on('end', () => {
+                if (response.statusCode !== 200) {
+                    errorLog(data !== '' ? data : 'clickhouse: response.statusCode !== 200');
+                    saveUnsentRows(rows);
+                }
+                lockForSending = false;
+            });
         });
-        response.on('end', (response) => {
-            if (data !== '') {
-                //console.log(data);
-            }
+
+        request.on('error', (error) => {
+            errorLog(error);
+            saveUnsentRows(rows);
             lockForSending = false;
         });
-    });
 
-    request.on('error', (error) => {
-        errorLog(error);
-        saveUnsentRows(rows);
-        lockForSending = false;
-    });
+        request.on('timeout', () => {
+            request.abort();
+        });
 
-    request.on('timeout', () => {
-        request.abort();
+        request.write(rows);
+        request.end();
     });
-
-    request.write(rows);
-    request.end();
 }
 
 if (cluster.isMaster) {
@@ -87,13 +92,13 @@ if (cluster.isMaster) {
 
         //fs.readdir(config.unsentRowsDir, (error, files) => {
             //console.log(files);
-            child_process.exec(`find unsent_rows -type f -mmin +${1+config.timer/60} | while read i; do cat "$i" | curl '${config.clickhouse.url}&query=INSERT+INTO+${config.clickhouse.table}+FORMAT+JSONEachRow' --data-binary @- && rm -f "$i"; done`, (error) => {
+            child_process.exec(`find unsent_rows -type f -mmin +1 | while read i; do cat "$i" | curl '${config.clickhouse.url}&query=INSERT+INTO+${config.clickhouse.table}+FORMAT+JSONEachRow' --data-binary @- && rm -f "$i"; done`, (error) => {
                 //console.log(result);
                 if (error) {errorLog(error);}
                 lockForSending = false;
             });
         //});
-    }, config.resendTimer * 1000);
+    }, config.timer * 1000);
 } else {
     server.on('error', (err) => {
         errorLog(`server error:\n${err.stack}`);

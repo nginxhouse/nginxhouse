@@ -9,6 +9,5 @@
   },
   "errorLog": "error.log",
   "timer": 60,
-  "unsentRowsDir": "unsent_rows",
-  "resendTimer": 60
+  "unsentRowsDir": "unsent_rows"
 }
