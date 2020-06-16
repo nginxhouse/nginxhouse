@@ -92,7 +92,7 @@ if (cluster.isMaster) {
 
         //fs.readdir(config.unsentRowsDir, (error, files) => {
             //console.log(files);
-            child_process.exec(`find unsent_rows -type f -mmin +1 | while read i; do cat "$i" | curl '${config.clickhouse.url}&query=INSERT+INTO+${config.clickhouse.table}+FORMAT+JSONEachRow' --data-binary @- && rm -f "$i"; done`, (error) => {
+            child_process.exec(`find unsent_rows -type f -mmin +1 | while read i; do cat "$i" | curl -H 'Content-Encoding: gzip' '${config.clickhouse.url}&query=INSERT+INTO+${config.clickhouse.table}+FORMAT+JSONEachRow' --data-binary @- && rm -f "$i"; done`, (error) => {
                 //console.log(result);
                 if (error) {errorLog(error);}
                 lockForSending = false;
